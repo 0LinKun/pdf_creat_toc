@@ -2,6 +2,12 @@
 
 基于[pdf.tocgen](https://github.com/Krasjet/pdf.tocgen)实现的PDF自动添加目录程序
 
+下载依赖
+
+```
+pip install  pdf.tocgen
+```
+
 目前可以完成一层目录自动添加，但二层目录时会报错，
 
 有志之士可以进行完善
