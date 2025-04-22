@@ -1,6 +1,6 @@
 # pdf_creat_toc
 
-基于[pdf.tocgen](https://github.com/Krasjet/pdf.tocgen)实现的PDF自动添加目录程序
+基于[pdf.tocgen](https://github.com/Krasjet/pdf.tocgen)实现的PDF自动添加目录程序,不支持扫描版pdf
 
 下载依赖
 
