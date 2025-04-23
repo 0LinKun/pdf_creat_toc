@@ -185,18 +185,62 @@ class PDFTocGenerator(tk.Tk):
             messagebox.showerror(" 未知错误", str(e))
 
     def _write_recipe(self, recipe_path, pdf_path, headings):
-        """智能写入配方文件"""
-        # 自动创建目录
+        """智能写入配方文件，自动处理PDF元数据（处理编码问题）"""
+        # 自动创建目录（确保路径存在）
         os.makedirs(os.path.dirname(recipe_path), exist_ok=True)
 
-        with open(recipe_path, 'w+', encoding='utf-8') as f:  # 使用w+模式创建或覆盖
-            for level, page, text in headings:
-                cmd = ['pdfxmeta','-p', str(page),'-a', str(level),pdf_path,text]
-                result = subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=True,timeout=30)
-                # 过滤注释行并写入
-                filtered = [line for line in result.stdout.split('\n')
-                            if not line.strip().startswith('#')]
-                f.write('\n'.join(filtered) + '\n\n')
+        output = []
+        for level, page, text in headings:
+            try:
+                # 执行pdfxmeta命令并捕获输出
+                cmd = [
+                    'pdfxmeta',
+                    '-p', str(page),
+                    '-a', str(level),
+                    pdf_path,
+                    text.strip()
+                ]
+                result = subprocess.run(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    # 显式指定编码参数
+                    encoding='utf-8',
+                    # 自动转换换行符
+                    universal_newlines=True,
+                    check=True,
+                    timeout=30
+                )
+
+                # 处理可能为None的stdout输出
+                raw_output = result.stdout or ''
+
+                # 使用更安全的解码方式
+                decoded_output = raw_output.encode('utf-8', 'surrogateescape').decode('utf-8')
+
+                output_block = decoded_output.splitlines()
+
+                if output_block:
+                    output.append('\n'.join(output_block))
+                    output.append('')  # 添加块间空行
+
+            except subprocess.CalledProcessError as e:
+                # 错误信息解码处理
+                error_msg = e.stderr.decode('utf-8', 'replace') if isinstance(e.stderr, bytes) else e.stderr
+                print(f"命令执行失败: {' '.join(cmd)}\n错误信息: {error_msg}")
+            except subprocess.TimeoutExpired:
+                print(f"命令超时: {' '.join(cmd)}")
+            except UnicodeDecodeError as ude:
+                print(f"编码解析失败: {ude}\n尝试使用错误替代字符解码")
+                # 使用替代字符处理非法字节
+                fallback_output = raw_output.encode('utf-8', 'surrogateescape').decode('utf-8', 'replace')
+                output.append(fallback_output)
+
+        # 批量写入文件（强制使用UTF-8编码）
+        with open(recipe_path, 'w', encoding='utf-8', errors='replace') as f:
+            final_content = '\n'.join(output).strip() + '\n'
+            # 处理BOM头（Windows兼容）
+            f.write(final_content.encode('utf-8').decode('utf-8-sig'))
 
     def _generate_toc_structure(self, recipe_path, toc_path, pdf_path):
         """生成目录中间文件"""
@@ -214,20 +258,51 @@ class PDFTocGenerator(tk.Tk):
             )
 
     def _embed_toc(self, toc_path, output_path, input_pdf):
-        """嵌入目录到PDF"""
-        with open(toc_path, 'r', encoding='utf-8') as f:
-            pdftocio_cmd = [
-                'pdftocio',
-                '-v',
-                '-o', output_path,
-                input_pdf
-            ]
-            subprocess.run(
-                pdftocio_cmd,
-                stdin=f,
-                check=True,
-                timeout=60
-            )
+        """嵌入目录到PDF（修复路径空格问题）"""
+        try:
+            # 标准化路径处理（Windows特殊处理）
+            def win_path(path):
+                if os.name == 'nt':
+                    return f'"{os.path.normpath(path)}"'
+                return f'"{path}"'
+
+            with open(toc_path, 'r', encoding='utf-8') as f:
+                pdftocio_cmd = [
+                    'pdftocio',
+                    '-v',
+                    '-o', win_path(output_path),
+                    win_path(input_pdf)
+                ]
+
+                # 打印调试信息
+                print("执行命令:", ' '.join(pdftocio_cmd))
+
+                result = subprocess.run(
+                    pdftocio_cmd,
+                    stdin=f,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    encoding='utf-8',
+                    errors='replace',
+                    check=True,
+                    timeout=60
+                )
+
+                # 记录完整输出
+                print("命令输出:", result.stdout)
+                print("错误输出:", result.stderr)
+
+            self.status.config(text="完成")
+        except subprocess.CalledProcessError as e:
+            error_msg = f"""
+            命令执行失败: {' '.join(e.cmd)}
+            状态码: {e.returncode}
+            错误输出: {e.stderr}
+            标准输出: {e.stdout}
+            """
+            messagebox.showerror("命令执行错误", error_msg)
+        except Exception as e:
+            messagebox.showerror("未知错误", str(e))
 
 
 if __name__ == '__main__':
