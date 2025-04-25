@@ -3,13 +3,11 @@
 PDF智能目录生成器 (GUI版 2025-04-22)
 """
 import tkinter as tk
-from tempfile import TemporaryDirectory
 from tkinter import ttk, filedialog, messagebox
 import subprocess
 import os
 import shutil
 import threading
-import pdftocgen
 
 
 class PDFTocGenerator(tk.Tk):
@@ -270,8 +268,9 @@ class PDFTocGenerator(tk.Tk):
                 pdftocio_cmd = [
                     'pdftocio',
                     '-v',
-                    '-o', win_path(output_path),
-                    win_path(input_pdf)
+                    '-o', output_path,
+                    input_pdf,
+
                 ]
 
                 # 打印调试信息
